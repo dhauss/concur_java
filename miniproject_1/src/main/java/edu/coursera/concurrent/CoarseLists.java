@@ -18,7 +18,6 @@ public final class CoarseLists {
      */
     public static final class CoarseList extends ListSet {
         final ReentrantLock lock = new ReentrantLock();
-    	
         /**
          * Default constructor.
          */
@@ -114,7 +113,6 @@ public final class CoarseLists {
      */
     public static final class RWCoarseList extends ListSet {
         ReentrantReadWriteLock RWLock = new ReentrantReadWriteLock();
-
         /**
          * Default constructor.
          */
@@ -152,8 +150,6 @@ public final class CoarseLists {
 
         /**
          * {@inheritDoc}
-         *
-         * TODO Use a read-write lock to protect against concurrent access.
          */
         @Override
         boolean remove(final Integer object) {
@@ -180,8 +176,6 @@ public final class CoarseLists {
 
         /**
          * {@inheritDoc}
-         *
-         * TODO Use a read-write lock to protect against concurrent access.
          */
         @Override
         boolean contains(final Integer object) {
