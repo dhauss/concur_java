@@ -3,18 +3,19 @@ package edu.coursera.concurrent;
 import edu.coursera.concurrent.AbstractBoruvka;
 import edu.coursera.concurrent.SolutionToBoruvka;
 import edu.coursera.concurrent.boruvka.Edge;
+import edu.coursera.concurrent.boruvka.sequential.SeqComponent;
 import edu.coursera.concurrent.boruvka.Component;
 
 import java.util.Queue;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * A parallel implementation of Boruvka's algorithm to compute a Minimum
  * Spanning Tree.
  */
 public final class ParBoruvka extends AbstractBoruvka<ParBoruvka.ParComponent> {
-
     /**
      * Constructor.
      */
@@ -28,7 +29,75 @@ public final class ParBoruvka extends AbstractBoruvka<ParBoruvka.ParComponent> {
     @Override
     public void computeBoruvka(final Queue<ParComponent> nodesLoaded,
             final SolutionToBoruvka<ParComponent> solution) {
-        throw new UnsupportedOperationException();
+        final int numThreads = Runtime.getRuntime().availableProcessors();
+        final Thread[] threads = new Thread[numThreads];
+        final ParComponent[] result = new ParComponent[1];
+    	
+        for(int i = 0; i < numThreads; i++) {
+        	threads[i] = new Thread(() -> {
+    			ParComponent loopNode = null;
+        		// START OF EDGE CONTRACTION ALGORITHM
+        		while ((loopNode = nodesLoaded.poll()) != null) {
+            
+            		if (!loopNode.lock.tryLock()) {
+                		continue;
+            		}
+
+            		if (loopNode.isDead) {
+            			loopNode.lock.unlock();
+                		continue; // node loopNode has already been merged
+            		}
+
+            		// retrieve loopNode's edge with minimum cost
+            		final Edge<ParComponent> e = loopNode.getMinEdge();
+            		if (e == null) {
+            			result[0] = loopNode;
+            			solution.setSolution(loopNode);
+                		break; // done - we've contracted the graph to a single node
+            		}
+
+            		final ParComponent other = e.getOther(loopNode);
+            		if (!other.lock.tryLock()) {
+                		loopNode.lock.unlock();
+                		nodesLoaded.add(loopNode);
+                		continue;
+            		}
+            		
+            		if(other.isDead) {
+            			loopNode.lock.unlock();
+            			other.lock.unlock();
+            			nodesLoaded.add(loopNode);
+            			continue;
+            		}
+            		
+            		other.isDead = true;
+            		// merge node other into node loopNode
+            		loopNode.merge(other, e.weight());
+            		loopNode.lock.unlock();
+            		other.lock.unlock();
+            		// add newly merged loopNode back in the work-list
+            		nodesLoaded.add(loopNode);
+
+        		}
+        	});
+        	threads[i].start();
+        }
+        
+        for(int i = 0; i < numThreads; i++) {
+        	while(true) {
+        		try {
+        			threads[i].join();
+        			break;
+        		} catch (InterruptedException e) {
+        			e.printStackTrace();
+        		}
+        	}
+        }
+        final ParComponent resultNode = result[0];
+        if(resultNode != null) {
+        	long totalEdges = resultNode.totalEdges();
+        	double totalWeight = resultNode.totalWeight();
+        }
     }
 
     /**
@@ -42,6 +111,7 @@ public final class ParBoruvka extends AbstractBoruvka<ParBoruvka.ParComponent> {
          *  it.
          */
         public final int nodeId;
+        public final ReentrantLock lock = new ReentrantLock();
 
         /**
          * List of edges attached to this component, sorted by weight from least
